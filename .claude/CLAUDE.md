@@ -217,6 +217,10 @@ docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database
 # consola psql
 docker compose exec postgres psql -U postgres -d data_warehouse
 
+# Bronze: crear tablas (borra datos) y crear el procedimiento (idempotentes)
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/ddl_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/proc_load_bronze.sql
+
 # cargar capas (dentro del contenedor los CSV están en /datasets)
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"

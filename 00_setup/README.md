@@ -65,4 +65,16 @@ docker compose down -v    # además elimina el volumen: borra TODOS los datos
 
 ## Ruta de los CSV para la carga de Bronze
 
-Dentro del contenedor los archivos están en `/datasets`, por lo que la carga será `CALL bronze.load_bronze('/datasets');`.
+Dentro del contenedor los archivos están en `/datasets`, por lo que la carga es `CALL bronze.load_bronze('/datasets');` (`/datasets` es también el valor por defecto del parámetro).
+
+Orden completo para Bronze:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/ddl_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/proc_load_bronze.sql
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze();"
+```
+
+`ddl_bronze.sql` hace `DROP TABLE IF EXISTS`: volver a ejecutarlo vacía las tablas, y hay que recargarlas con el `CALL`.
+
+En Git Bash (Windows), si pasas rutas del contenedor como argumento, antepón `MSYS_NO_PATHCONV=1` para que no se conviertan en rutas de Windows. En PowerShell no hace falta, pero el operador `<` no existe: usa `Get-Content archivo.sql | docker compose exec -T postgres psql ...`.

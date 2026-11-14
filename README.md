@@ -135,9 +135,11 @@ docker compose up -d
 docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database.sql
 ```
 
-4. Cargar las capas, en orden (dentro del contenedor los CSV están en `/datasets`):
+4. Crear las tablas de Bronze (el DDL borra y recrea las tablas) y cargar las capas, en orden (dentro del contenedor los CSV están en `/datasets`):
 
 ```bash
+docker compose exec -T postgres psql -U postgres -d data_warehouse -f - < 03_scripts/bronze/ddl_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -f - < 03_scripts/bronze/proc_load_bronze.sql
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
 ```
@@ -159,7 +161,7 @@ La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se c
 |-|-|
 |1. Estructura del repositorio|Hecho|
 |2. Base de datos y esquemas (Docker)|Hecho y verificado|
-|3. Bronze|Pendiente|
+|3. Bronze|Hecho y verificado|
 |4. Silver|Pendiente|
 |5. Gold|Pendiente|
 |6. Pruebas|Pendiente|
