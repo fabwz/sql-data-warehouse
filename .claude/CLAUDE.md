@@ -67,6 +67,7 @@ sql-data-warehouse-project/
 │   ├── source_crm/    3 archivos CSV del CRM
 │   └── source_erp/    3 archivos CSV del ERP
 ├── 02_docs/           Requisitos, diagramas, catálogo de datos
+│   └── convenciones_nomenclatura_es.md   Convenciones de nombres (oficial, obligatorio, no modificar)
 ├── 03_scripts/
 │   ├── init_database.sql   Crea la base de datos y los esquemas. Se ejecuta primero.
 │   ├── bronze/             DDL de tablas y procedimiento de carga
@@ -79,38 +80,23 @@ Orden de scripts dentro de cada capa: primero el DDL (`ddl_<capa>.sql`), luego e
 
 ## Convenciones de nombres
 
-### Principios generales
+La fuente oficial es [`02_docs/convenciones_nomenclatura_es.md`](../02_docs/convenciones_nomenclatura_es.md). Es obligatoria y no se modifica. Ante cualquier conflicto con este archivo, manda ese documento. Resumen:
 
-- `snake_case`, todo en minúsculas.
-- Inglés para todos los identificadores.
-- Sin palabras reservadas de SQL como nombres de objetos.
-- Sin comillas dobles en identificadores.
+| Elemento | Regla | Ejemplo |
+|----------|-------|---------|
+| General | `snake_case`, minúsculas, inglés, sin palabras reservadas de SQL | `sales_amount` |
+| Tablas Bronze y Silver | `<sourcesystem>_<entity>`, con el nombre original de la tabla sin modificar | `crm_cust_info`, `erp_loc_a101` |
+| Tablas/vistas Gold | `<category>_<entity>`, con nombres de negocio. Categorías: `dim_`, `fact_`, `report_` | `dim_customers`, `fact_sales` |
+| Claves subrogadas | `<table_name>_key` | `customer_key` |
+| Columnas técnicas | prefijo `dwh_` seguido de un nombre descriptivo | `dwh_load_date` |
+| Procedimientos | `load_<layer>`, dentro de su esquema | `silver.load_silver()` |
 
-### Tablas
+Reglas del proyecto que complementan el documento (no lo contradicen):
 
-| Capa | Patrón | Ejemplo |
-|------|--------|---------|
-| Bronze | `<sistema>_<entidad>`, igual que el origen | `crm_cust_info`, `erp_loc_a101` |
-| Silver | Igual que Bronze | `crm_cust_info` |
-| Gold | `<tipo>_<entidad>`, con nombres de negocio | `dim_customers`, `dim_products`, `fact_sales` |
-
-- `<sistema>`: `crm` o `erp`.
-- `<tipo>` en Gold: `dim` para dimensiones, `fact` para hechos, `report` para vistas agregadas de reporte.
-- Las entidades en Gold van en plural.
-- No repetir el esquema en el nombre: `bronze.crm_cust_info`, no `bronze.bronze_crm_cust_info`.
-
-### Columnas
-
-- **Bronze y Silver**: conservan el nombre original del CSV.
-- **Gold**: nombres descriptivos de negocio, en `snake_case` (por ejemplo `customer_id`, `first_name`, `country`, `order_date`, `sales_amount`). Renombrar las columnas de origen cuando su nombre no sea claro.
-- **Claves subrogadas**: `<entidad>_key`. Ejemplo: `customer_key`, `product_key`. Solo existen en Gold, generadas con `ROW_NUMBER() OVER (ORDER BY ...)`.
-- **Columnas técnicas**: prefijo `dwh_`. Se agregan en Silver. Ejemplo: `dwh_create_date`, con valor por defecto `now()`.
-- Tipos de dato: usar el tipo más preciso que permitan los datos (`date`, `integer`, `numeric`, `varchar(n)`, `text`). Bronze puede usar `text` o `varchar` si el CSV trae valores sucios que impiden un tipo estricto.
-
-### Procedimientos y vistas
-
-- Procedimientos: `load_<capa>`, dentro de su esquema. `bronze.load_bronze()`, `silver.load_silver()`.
-- Vistas Gold: mismo patrón que las tablas Gold, sin sufijo `_view`.
+- Sin comillas dobles en identificadores. No repetir el esquema en el nombre (`bronze.crm_cust_info`, no `bronze.bronze_crm_cust_info`).
+- Bronze y Silver conservan los nombres de columna del CSV. Gold usa nombres descriptivos de negocio en `snake_case` y renombra las columnas poco claras.
+- Las claves subrogadas solo existen en Gold, generadas con `ROW_NUMBER() OVER (ORDER BY ...)`. Las columnas técnicas se agregan en Silver; `dwh_load_date` lleva valor por defecto `now()`.
+- Tipos de dato: el más preciso que permitan los datos. Bronze puede usar `text` o `varchar` si el CSV trae valores sucios.
 - Archivos: `ddl_<capa>.sql`, `proc_load_<capa>.sql`, `test_<capa>.sql`.
 
 ## Procedimientos de carga

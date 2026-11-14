@@ -103,7 +103,7 @@ El diagrama del modelo y el catálogo de datos estarán en `02\_docs/`.
 ├── 01\_datasets/    Archivos CSV de origen
 │   ├── source\_crm/
 │   └── source\_erp/
-├── 02\_docs/        Requisitos, diagramas y catálogo de datos
+├── 02\_docs/        Requisitos, diagramas, catálogo de datos y convenciones de nombres
 ├── 03\_scripts/     Scripts SQL
 │   ├── init\_database.sql
 │   ├── bronze/
@@ -169,14 +169,16 @@ La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se c
 
 **Nombres de objetos**
 
+La referencia completa es [`02_docs/convenciones_nomenclatura_es.md`](02_docs/convenciones_nomenclatura_es.md). Resumen:
+
 |Elemento|Convención|Ejemplo|
 |-|-|-|
-|General|`snake\_case`, minúsculas, inglés|`sales\_amount`|
-|Tablas Bronze y Silver|`<sistema>\_<entidad>`, igual que el origen|`crm\_cust\_info`|
-|Vistas Gold|`dim\_<entidad>`, `fact\_<entidad>`|`dim\_customers`|
-|Claves subrogadas|`<entidad>\_key`|`customer\_key`|
-|Columnas técnicas|prefijo `dwh\_`|`dwh\_create\_date`|
-|Procedimientos|`load\_<capa>`|`silver.load\_silver()`|
+|General|`snake_case`, minúsculas, inglés, sin palabras reservadas de SQL|`sales_amount`|
+|Tablas Bronze y Silver|`<sourcesystem>_<entity>`, con el nombre original sin modificar|`crm_cust_info`|
+|Tablas/vistas Gold|`<category>_<entity>` con `dim_`, `fact_` o `report_`|`dim_customers`|
+|Claves subrogadas|`<table_name>_key`|`customer_key`|
+|Columnas técnicas|prefijo `dwh_`|`dwh_load_date`|
+|Procedimientos|`load_<layer>`|`silver.load_silver()`|
 
 **Commits**
 
