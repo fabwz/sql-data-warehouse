@@ -28,6 +28,8 @@ El contenedor se llama `dwh_postgres`, escucha en el puerto 5432 y guarda los da
 docker compose exec postgres ls /datasets
 ```
 
+Debe mostrar `source_crm` y `source_erp`. En Git Bash (Windows) este comando falla porque la ruta `/datasets` se convierte en una ruta de Windows; use `MSYS_NO_PATHCONV=1 docker compose exec postgres ls /datasets` (ver la nota al final).
+
 ## 3. Crear la base de datos y los esquemas
 
 Sin `psql` local (recomendado):
@@ -75,7 +77,7 @@ docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_S
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze();"
 ```
 
-`ddl_bronze.sql` hace `DROP TABLE IF EXISTS`: volver a ejecutarlo vacía las tablas, y hay que recargarlas con el `CALL`.
+`ddl_bronze.sql` hace `DROP TABLE IF EXISTS`: volver a ejecutarlo vacía las tablas, y hay que recargarlas con el `CALL`. Resultado esperado (en el orden de las fuentes): 18 494, 397, 60 398, 18 484, 18 484 y 37 filas (116 294 en total).
 
 ## Orden completo para Silver
 
@@ -100,5 +102,11 @@ docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/te
 ```
 
 `ddl_gold.sql` usa `CREATE OR REPLACE VIEW` y es idempotente. Resultado esperado: `dim_customers` 18 484 filas, `dim_products` 295 y `fact_sales` 60 398. `test_gold.sql` debe devolver cero filas en cada verificación. Las claves subrogadas se generan en la vista y no son estables si cambian los datos de origen.
+
+## Documentación
+
+Al terminar, el diagrama del modelo, el catálogo de datos y las reglas de calidad están en [`02_docs/`](../02_docs/) (índice en el [`README.md`](../README.md) principal).
+
+## Nota para Windows
 
 En Git Bash (Windows), si pasas rutas del contenedor como argumento, antepón `MSYS_NO_PATHCONV=1` para que no se conviertan en rutas de Windows. En PowerShell no hace falta, pero el operador `<` no existe: usa `Get-Content archivo.sql | docker compose exec -T postgres psql ...`.

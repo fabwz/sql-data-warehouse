@@ -61,12 +61,16 @@ Solo se conocen los nombres de las tablas y sus claves. **Las columnas y tipos s
 ## Estructura del repositorio
 
 ```
-sql-data-warehouse-project/
+.
+├── docker-compose.yml  Postgres 16 en Docker (monta 01_datasets/ en /datasets)
+├── .env.example        Plantilla de credenciales (.env no se versiona)
 ├── 00_setup/          Guía de configuración
 ├── 01_datasets/       Archivos de origen (solo lectura)
 │   ├── source_crm/    3 archivos CSV del CRM
 │   └── source_erp/    3 archivos CSV del ERP
 ├── 02_docs/           Requisitos, diagramas, catálogo de datos
+│   ├── requirements.md, data_architecture.md, data_flow.md, data_model.md,
+│   │   data_catalog.md, data_quality_rules.md
 │   └── convenciones_nomenclatura_es.md   Convenciones de nombres (oficial, obligatorio, no modificar)
 ├── 03_scripts/
 │   ├── init_database.sql   Crea la base de datos y los esquemas. Se ejecuta primero.
@@ -206,7 +210,7 @@ Si un paso requiere una acción de git, Claude no la ejecuta: indica al usuario 
 ## Cómo trabajar
 
 - Un paso a la vez. Terminar y verificar una capa antes de empezar la siguiente.
-- Orden del proyecto: estructura del repo → base de datos y esquemas → Bronze → Silver → Gold → pruebas → documentación.
+- Orden del proyecto: estructura del repo → base de datos y esquemas → Bronze → Silver → Gold → documentación y verificación final. Las pruebas (`04_tests/`) se escriben junto con Silver y Gold.
 - Los scripts deben poder ejecutarse más de una vez sin errores (idempotentes): `CREATE SCHEMA IF NOT EXISTS`, `DROP TABLE IF EXISTS` en el DDL, `CREATE OR REPLACE` en procedimientos y vistas.
 - Probar cada script contra una base real antes de dar un paso por terminado. Mostrar el resultado de la ejecución.
 - Revisar los datos antes de escribir transformaciones: no asumir formatos.
@@ -222,12 +226,15 @@ Se mantiene en `02_docs/`:
 - Diagrama de flujo de datos (de origen a Gold).
 - Modelo de datos de Gold (esquema en estrella).
 - Catálogo de datos de Gold: por cada vista, descripción y por cada columna, su tipo y significado.
+- Requisitos y reglas de calidad de Silver.
+
+Archivos: `requirements.md`, `data_architecture.md`, `data_flow.md`, `data_model.md`, `data_catalog.md` y `data_quality_rules.md`. Los tipos y conteos salen de la base real, no de memoria.
 
 Cada script SQL lleva al inicio un comentario con su propósito y las advertencias de uso.
 
 ## Comandos
 
-Postgres corre en Docker (`postgres:16`, contenedor `dwh_postgres`, base `data_warehouse`). Credenciales en `.env` (copiar de `.env.example`, no se versiona). `01_datasets/` se monta en `/datasets` (solo lectura). Los comandos de carga y pruebas se completan cuando existan los scripts correspondientes.
+Postgres corre en Docker (`postgres:16`, contenedor `dwh_postgres`, base `data_warehouse`). Credenciales en `.env` (copiar de `.env.example`, no se versiona). `01_datasets/` se monta en `/datasets` (solo lectura). Orden completo de ejecución, desde cero:
 
 ```bash
 # primera vez
@@ -237,25 +244,26 @@ cp .env.example .env
 docker compose up -d
 docker compose down          # conserva los datos; "down -v" los borra
 
-# crear base de datos y esquemas (idempotente)
+# 1. crear base de datos y esquemas (idempotente)
 docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database.sql
+
+# 2. Bronze: crear tablas (borra datos), crear el procedimiento y cargar
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/ddl_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/proc_load_bronze.sql
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
+
+# 3. Silver: crear tablas (borra datos), crear el procedimiento y cargar
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/ddl_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/proc_load_silver.sql
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
+
+# 4. Gold: crear las vistas (idempotente, no hay carga)
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/gold/ddl_gold.sql
+
+# 5. ejecutar pruebas (cero filas en cada verificación)
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
 
 # consola psql
 docker compose exec postgres psql -U postgres -d data_warehouse
-
-# Bronze: crear tablas (borra datos) y crear el procedimiento (idempotentes)
-docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/ddl_bronze.sql
-docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/proc_load_bronze.sql
-
-# cargar capas (dentro del contenedor los CSV están en /datasets)
-docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
-docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
-
-# Silver: crear tablas (borra datos) y crear el procedimiento (idempotentes)
-docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/ddl_silver.sql
-docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/proc_load_silver.sql
-
-# ejecutar pruebas
-docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
-docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
 ```

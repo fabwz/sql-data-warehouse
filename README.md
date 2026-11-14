@@ -31,15 +31,12 @@ Importar los datos de dos sistemas de origen, depurarlos y exponerlos en un mode
 Una sola base de datos con un esquema por capa. Los esquemas permiten consultar entre capas, algo que no es posible con bases de datos separadas en PostgreSQL.
 
 ```
- Fuentes              Data Warehouse (PostgreSQL)                    Consumo
-┌─────────┐   ┌──────────┐    ┌──────────┐    ┌──────────┐   ┌───────────────────┐
-│ CRM CSV │   │  bronze  │    │  silver  │    │   gold   │   │ BI y reportes     │
-│         │──▶│ datos    │──▶ │ datos    │──▶ │ datos    │──▶│ Consultas SQL     │
-│ ERP CSV │   │ originales    │ depurados│    │ analíticos   │ Machine learning  │
-└─────────┘   └──────────┘    └──────────┘    └──────────┘   └───────────────────┘
-               tablas          tablas          vistas
-               truncate+copy   truncate+insert estrella
+CSV (CRM y ERP) ──▶ bronze ──▶ silver ──▶ gold ──▶ BI, consultas SQL, machine learning
+                    tablas     tablas     vistas
+                    originales depurados  estrella
 ```
+
+Diagramas en Mermaid: [`02_docs/data_architecture.md`](02_docs/data_architecture.md).
 
 |Capa|Esquema|Objeto|Carga|Transformación|Modelado|Público|
 |-|-|-|-|-|-|-|
@@ -49,8 +46,8 @@ Una sola base de datos con un esquema por capa. Los esquemas permiten consultar 
 
 ### Flujo de carga
 
-1. `bronze.load\_bronze()` vacía cada tabla y la carga desde su CSV con `COPY`, sin transformar.
-2. `silver.load\_silver()` vacía cada tabla, lee de Bronze y aplica la limpieza y las columnas derivadas.
+1. `bronze.load_bronze()` vacía cada tabla y la carga desde su CSV con `COPY`, sin transformar.
+2. `silver.load_silver()` vacía cada tabla, lee de Bronze y aplica la limpieza y las columnas derivadas.
 3. Las vistas de `gold` leen de Silver y se actualizan solas al cambiar los datos subyacentes.
 
 Cada procedimiento se ejecuta en una transacción y reporta filas cargadas y duración por tabla. Si una tabla falla, la carga se revierte completa.
@@ -59,22 +56,22 @@ Cada procedimiento se ejecuta en una transacción y reporta filas cargadas y dur
 
 |Sistema|Tabla|Contenido|
 |-|-|-|
-|CRM|`crm\_cust\_info`|Información de clientes|
-|CRM|`crm\_prd\_info`|Productos, vigentes e históricos|
-|CRM|`crm\_sales\_details`|Transacciones de ventas y pedidos|
-|ERP|`erp\_cust\_az12`|Datos adicionales del cliente (fecha de nacimiento)|
-|ERP|`erp\_loc\_a101`|Ubicación del cliente (país)|
-|ERP|`erp\_px\_cat\_g1v2`|Categorías de productos|
+|CRM|`crm_cust_info`|Información de clientes|
+|CRM|`crm_prd_info`|Productos, vigentes e históricos|
+|CRM|`crm_sales_details`|Transacciones de ventas y pedidos|
+|ERP|`erp_cust_az12`|Datos adicionales del cliente (fecha de nacimiento)|
+|ERP|`erp_loc_a101`|Ubicación del cliente (país)|
+|ERP|`erp_px_cat_g1v2`|Categorías de productos|
 
 Relaciones entre fuentes:
 
 ```
-crm\_sales\_details ──(prd\_key)──▶ crm\_prd\_info ──(prd\_key)──▶ erp\_px\_cat\_g1v2
+crm_sales_details ──(prd_key)──▶ crm_prd_info ──(prd_key)──▶ erp_px_cat_g1v2
         │
-     (cst\_id)
+     (cst_id)
         ▼
-  crm\_cust\_info ──(cst\_key)──▶ erp\_cust\_az12
-                       └─────▶ erp\_loc\_a101
+  crm_cust_info ──(cst_key)──▶ erp_cust_az12
+                       └─────▶ erp_loc_a101
 ```
 
 ## Modelo analítico (Gold)
@@ -83,33 +80,35 @@ Esquema en estrella con una tabla de hechos y dos dimensiones.
 
 |Vista|Tipo|Descripción|
 |-|-|-|
-|`gold.dim\_customers`|Dimensión|Clientes del CRM enriquecidos con datos del ERP|
-|`gold.dim\_products`|Dimensión|Productos del CRM con su categoría del ERP|
-|`gold.fact\_sales`|Hechos|Transacciones de venta, referenciadas a las claves subrogadas de las dimensiones|
+|`gold.dim_customers`|Dimensión|Clientes del CRM enriquecidos con datos del ERP|
+|`gold.dim_products`|Dimensión|Productos del CRM con su categoría del ERP|
+|`gold.fact_sales`|Hechos|Transacciones de venta, referenciadas a las claves subrogadas de las dimensiones|
 
-El diagrama del modelo y el catálogo de datos estarán en `02\_docs/`.
+El diagrama del modelo está en [`02_docs/data_model.md`](02_docs/data_model.md) y el catálogo de datos en [`02_docs/data_catalog.md`](02_docs/data_catalog.md).
 
 ## Calidad de datos
 
 * Cada tabla de Bronze se perfila antes de escribir su transformación en Silver: duplicados, nulos, espacios sobrantes, valores fuera de dominio y fechas inválidas.
 * Cada problema encontrado y su tratamiento se documenta en el script de Silver correspondiente.
-* Las pruebas de `04\_tests/` son consultas que devuelven filas solo cuando detectan un problema. Un resultado vacío indica que la verificación pasó.
+* Las pruebas de `04_tests/` son consultas que devuelven filas solo cuando detectan un problema. Un resultado vacío indica que la verificación pasó.
 
 ## Estructura del repositorio
 
 ```
 .
-├── 00\_setup/       Guía de configuración
-├── 01\_datasets/    Archivos CSV de origen
-│   ├── source\_crm/
-│   └── source\_erp/
-├── 02\_docs/        Requisitos, diagramas, catálogo de datos y convenciones de nombres
-├── 03\_scripts/     Scripts SQL
-│   ├── init\_database.sql
+├── 00_setup/       Guía de configuración
+├── 01_datasets/    Archivos CSV de origen
+│   ├── source_crm/
+│   └── source_erp/
+├── 02_docs/        Requisitos, diagramas, catálogo de datos y convenciones de nombres
+├── 03_scripts/     Scripts SQL
+│   ├── init_database.sql
 │   ├── bronze/
 │   ├── silver/
 │   └── gold/
-└── 04\_tests/       Pruebas de calidad de Silver y Gold
+├── 04_tests/       Pruebas de calidad de Silver y Gold
+├── docker-compose.yml
+└── .env.example
 ```
 
 ## Requisitos
@@ -117,11 +116,11 @@ El diagrama del modelo y el catálogo de datos estarán en `02\_docs/`.
 * Docker con Docker Compose
 * `psql` (opcional: también se puede usar el de dentro del contenedor)
 * Git
-* `COPY` lee los archivos desde el servidor, no desde el cliente. Por eso `docker-compose.yml` monta `01\_datasets/` en `/datasets` (solo lectura).
+* `COPY` lee los archivos desde el servidor, no desde el cliente. Por eso `docker-compose.yml` monta `01_datasets/` en `/datasets` (solo lectura).
 
 ## Puesta en marcha
 
-1. Clonar el repositorio y verificar que los CSV estén en `01\_datasets/`.
+1. Clonar el repositorio y verificar que los CSV estén en `01_datasets/`.
 2. Crear el archivo de variables de entorno y levantar PostgreSQL en Docker:
 
 ```bash
@@ -156,19 +155,34 @@ docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/te
 
 6. Consultar el modelo analítico en el esquema `gold`.
 
-La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se completan a medida que avanza el proyecto.
+La guía detallada está en [`00_setup/README.md`](00_setup/README.md).
+
+## Documentación
+
+Todo en [`02_docs/`](02_docs/):
+
+|Documento|Contenido|
+|-|-|
+|[`requirements.md`](02_docs/requirements.md)|Objetivo, alcance y criterios de aceptación|
+|[`data_architecture.md`](02_docs/data_architecture.md)|Diagrama de capas y detalle de Bronze, Silver y Gold|
+|[`data_flow.md`](02_docs/data_flow.md)|Linaje de cada tabla de origen hasta las vistas de Gold|
+|[`data_model.md`](02_docs/data_model.md)|Esquema en estrella y granularidad de la tabla de hechos|
+|[`data_catalog.md`](02_docs/data_catalog.md)|Catálogo de Gold para usuarios de negocio, con ejemplos de consultas|
+|[`data_quality_rules.md`](02_docs/data_quality_rules.md)|Reglas de limpieza aplicadas en Silver|
+|[`convenciones_nomenclatura_es.md`](02_docs/convenciones_nomenclatura_es.md)|Convenciones de nombres (oficial)|
 
 ## Estado
+
+Las pruebas (`04_tests/`) se escribieron junto con cada capa, no como un paso aparte.
 
 |Paso|Estado|
 |-|-|
 |1. Estructura del repositorio|Hecho|
 |2. Base de datos y esquemas (Docker)|Hecho y verificado|
-|3. Bronze|Hecho y verificado|
-|4. Silver|Hecho y verificado (6 tablas, `silver.load_silver()` y `04_tests/test_silver.sql` sin hallazgos)|
-|5. Gold|Hecho y verificado (3 vistas: 18 484, 295 y 60 398 filas; `04_tests/test_gold.sql` sin hallazgos)|
-|6. Pruebas|Parcial (`test_silver.sql` y `test_gold.sql` listos)|
-|7. Documentación|Pendiente|
+|3. Bronze|Hecho y verificado (6 tablas, `bronze.load_bronze()`: 18 494, 397, 60 398, 18 484, 18 484 y 37 filas)|
+|4. Silver|Hecho y verificado (6 tablas, `silver.load_silver()` y `04_tests/test_silver.sql`: 26 verificaciones sin hallazgos)|
+|5. Gold|Hecho y verificado (3 vistas: 18 484, 295 y 60 398 filas; `04_tests/test_gold.sql`: 16 verificaciones sin hallazgos)|
+|6. Documentación y verificación final|Hecho y verificado (6 documentos en `02_docs/`; flujo completo ejecutado desde cero con `docker compose down -v`)|
 
 ## Convenciones
 
