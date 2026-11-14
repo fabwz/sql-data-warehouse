@@ -20,7 +20,7 @@ Importar los datos de dos sistemas de origen, depurarlos y exponerlos en un mode
 
 ## Stack técnico
 
-* **Motor:** PostgreSQL 15 o superior
+* **Motor:** PostgreSQL 16, en Docker (`postgres:16`)
 * **Lenguaje:** SQL y PL/pgSQL
 * **Carga:** `COPY` desde archivos CSV
 * **Cliente:** `psql`
@@ -114,37 +114,56 @@ El diagrama del modelo y el catálogo de datos estarán en `02\_docs/`.
 
 ## Requisitos
 
-* PostgreSQL 15 o superior
-* `psql`
+* Docker con Docker Compose
+* `psql` (opcional: también se puede usar el de dentro del contenedor)
 * Git
-* Acceso del servidor de Postgres a los archivos de `01\_datasets/`. `COPY` lee los archivos desde el servidor, no desde el cliente. Si Postgres corre en un contenedor, hay que montar esa carpeta como volumen.
+* `COPY` lee los archivos desde el servidor, no desde el cliente. Por eso `docker-compose.yml` monta `01\_datasets/` en `/datasets` (solo lectura).
 
 ## Puesta en marcha
 
 1. Clonar el repositorio y verificar que los CSV estén en `01\_datasets/`.
-2. Crear la base de datos y los esquemas:
+2. Crear el archivo de variables de entorno y levantar PostgreSQL en Docker:
 
 ```bash
-   psql -U postgres -f 03\_scripts/init\_database.sql
-   ```
+cp .env.example .env
+docker compose up -d
+```
 
-3. Cargar las capas, en orden:
-
-```sql
-   CALL bronze.load\_bronze('<ruta\_datasets>');
-   CALL silver.load\_silver();
-   ```
-
-4. Ejecutar las pruebas:
+3. Crear la base de datos `data_warehouse` y los esquemas:
 
 ```bash
-   psql -U postgres -d <database> -f 04\_tests/test\_silver.sql
-   psql -U postgres -d <database> -f 04\_tests/test\_gold.sql
-   ```
+docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database.sql
+```
 
-5. Consultar el modelo analítico en el esquema `gold`.
+4. Cargar las capas, en orden (dentro del contenedor los CSV están en `/datasets`):
 
-Los scripts y la guía detallada de `00\_setup/` se completan a medida que avanza el proyecto.
+```bash
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
+```
+
+5. Ejecutar las pruebas:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
+```
+
+6. Consultar el modelo analítico en el esquema `gold`.
+
+La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se completan a medida que avanza el proyecto.
+
+## Estado
+
+|Paso|Estado|
+|-|-|
+|1. Estructura del repositorio|Hecho|
+|2. Base de datos y esquemas (Docker)|Hecho y verificado|
+|3. Bronze|Pendiente|
+|4. Silver|Pendiente|
+|5. Gold|Pendiente|
+|6. Pruebas|Pendiente|
+|7. Documentación|Pendiente|
 
 ## Convenciones
 

@@ -215,17 +215,27 @@ Cada script SQL lleva al inicio un comentario con su propósito y las advertenci
 
 ## Comandos
 
-Se completan cuando existan los scripts correspondientes.
+Postgres corre en Docker (`postgres:16`, contenedor `dwh_postgres`, base `data_warehouse`). Credenciales en `.env` (copiar de `.env.example`, no se versiona). `01_datasets/` se monta en `/datasets` (solo lectura). Los comandos de carga y pruebas se completan cuando existan los scripts correspondientes.
 
 ```bash
-# crear base de datos y esquemas
-psql -U postgres -f 03_scripts/init_database.sql
+# primera vez
+cp .env.example .env
 
-# cargar capas
-psql -U postgres -d <database> -c "CALL bronze.load_bronze('<ruta_datasets>');"
-psql -U postgres -d <database> -c "CALL silver.load_silver();"
+# levantar / detener el contenedor
+docker compose up -d
+docker compose down          # conserva los datos; "down -v" los borra
+
+# crear base de datos y esquemas (idempotente)
+docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database.sql
+
+# consola psql
+docker compose exec postgres psql -U postgres -d data_warehouse
+
+# cargar capas (dentro del contenedor los CSV están en /datasets)
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
+docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
 
 # ejecutar pruebas
-psql -U postgres -d <database> -f 04_tests/test_silver.sql
-psql -U postgres -d <database> -f 04_tests/test_gold.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
 ```
