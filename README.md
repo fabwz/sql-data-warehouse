@@ -135,16 +135,18 @@ docker compose up -d
 docker compose exec -T postgres psql -U postgres -f - < 03_scripts/init_database.sql
 ```
 
-4. Crear las tablas de Bronze (el DDL borra y recrea las tablas) y cargar las capas, en orden (dentro del contenedor los CSV están en `/datasets`):
+4. Crear las tablas y los procedimientos de Bronze y Silver (los DDL borran y recrean las tablas) y cargar las capas, en orden (dentro del contenedor los CSV están en `/datasets`):
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d data_warehouse -f - < 03_scripts/bronze/ddl_bronze.sql
-docker compose exec -T postgres psql -U postgres -d data_warehouse -f - < 03_scripts/bronze/proc_load_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/ddl_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/bronze/proc_load_bronze.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/ddl_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/proc_load_silver.sql
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
 ```
 
-5. Ejecutar las pruebas:
+5. Ejecutar las pruebas (cada verificación devuelve filas solo si hay un problema; `test_gold.sql` llegará con el paso 6):
 
 ```bash
 docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
@@ -162,7 +164,7 @@ La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se c
 |1. Estructura del repositorio|Hecho|
 |2. Base de datos y esquemas (Docker)|Hecho y verificado|
 |3. Bronze|Hecho y verificado|
-|4. Silver|Pendiente|
+|4. Silver|Hecho y verificado (6 tablas, `silver.load_silver()` y `04_tests/test_silver.sql` sin hallazgos)|
 |5. Gold|Pendiente|
 |6. Pruebas|Pendiente|
 |7. Documentación|Pendiente|

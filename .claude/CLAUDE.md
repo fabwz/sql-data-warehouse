@@ -124,6 +124,29 @@ Aplican a Bronze y Silver.
 - Tratamientos típicos: `TRIM`, estandarización de valores categóricos, conversión de tipos, manejo de nulos y ceros, deduplicación con `ROW_NUMBER()`, derivación de columnas.
 - Nunca borrar datos sin dejar constancia. Si un registro se descarta, el motivo queda en el comentario.
 
+## Decisiones de modelado
+
+Decididas tras perfilar Bronze (paso 4). Están implementadas en `03_scripts/silver/proc_load_silver.sql`; no reabrirlas sin consultar al usuario.
+
+**Silver**
+
+- Etiquetas con valores completos: `Married`/`Single`, `Male`/`Female`, `Road`/`Mountain`/`Other Sales`/`Touring`. Desconocidos en columnas categóricas: `'n/a'`. Nombres y apellidos nulos se dejan `NULL`.
+- `crm_prd_info` conserva TODAS las versiones de producto, con `prd_end_dt` recalculada (`LEAD(prd_start_dt) - 1 día` por `prd_key`; la última versión queda en `NULL`). Las fechas de fin originales se descartaron porque 200 filas terminaban antes de empezar.
+- `crm_prd_info.prd_key` queda sin el prefijo de categoría (coincide con `crm_sales_details.sls_prd_key`) y se agrega `cat_id` (con guion bajo, coincide con `erp_px_cat_g1v2.id`). `prd_cost` nulo se queda `NULL`.
+- Productos `CO-PE` (7): se conservan con `cat_id = 'CO_PE'`, que no existe en el catálogo ERP.
+- Fecha de pedido faltante o inválida (0, nula o longitud distinta de 8): `sls_ship_dt - 7 días`.
+- Importes: gana el precio. `sls_price` nulo o 0 → `sls_sales / sls_quantity`; negativo → `abs()`. `sls_sales` se recalcula como `sls_quantity * sls_price` si es nulo, ≤ 0 o distinto. Ambas columnas son `numeric(12,2)` porque el precio derivado puede tener decimales.
+- `erp_cust_az12.bdate`: solo las fechas futuras pasan a `NULL`; las anteriores a 1924 se conservan.
+- Claves ERP normalizadas para igualar `crm_cust_info.cst_key`: se quita el prefijo `NAS` de `erp_cust_az12.cid` y el guion de `erp_loc_a101.cid`.
+- Se descartan 4 filas de `crm_cust_info` con `cst_id` nulo y se deduplica por `cst_id` quedando la de `cst_create_date` más reciente.
+
+**Lo que Gold debe hacer**
+
+- `dim_products`: usar solo la versión vigente (`prd_end_dt IS NULL`), una fila por `prd_key`. Las ventas se unen por `sls_prd_key = prd_key`.
+- `dim_products`: categoría, subcategoría y mantenimiento salen de `erp_px_cat_g1v2` por `cat_id = id`. Los productos sin match (`CO_PE`) llevan `'n/a'` en esas columnas.
+- `dim_customers`: el CRM es la fuente maestra. El género del ERP (`erp_cust_az12.gen`) se usa como respaldo solo cuando el del CRM es `'n/a'`. Fecha de nacimiento (`bdate`) y país (`cntry`) vienen del ERP, unidos por `cst_key = cid`.
+- Hay 57 clientes con género distinto entre CRM y ERP; en esos casos manda el CRM.
+
 ## Gold
 
 - Vistas con `CREATE OR REPLACE VIEW`.
@@ -224,6 +247,10 @@ docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_S
 # cargar capas (dentro del contenedor los CSV están en /datasets)
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.load_bronze('/datasets');"
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
+
+# Silver: crear tablas (borra datos) y crear el procedimiento (idempotentes)
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/ddl_silver.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/silver/proc_load_silver.sql
 
 # ejecutar pruebas
 docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
