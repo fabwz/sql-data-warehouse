@@ -90,4 +90,15 @@ docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/te
 
 `ddl_silver.sql` también hace `DROP TABLE IF EXISTS`: volver a ejecutarlo vacía las tablas y hay que recargarlas con el `CALL`. La carga es completa (`TRUNCATE` + `INSERT`) y atómica: si una tabla falla, ninguna queda a medias. Resultado esperado: 18 484, 397, 60 398, 18 484, 18 484 y 37 filas. `test_silver.sql` debe devolver cero filas en cada verificación.
 
+## Orden completo para Gold
+
+Requiere Silver cargado. Gold son solo vistas (sin datos propios), por lo que no hay paso de carga:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/gold/ddl_gold.sql
+docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
+```
+
+`ddl_gold.sql` usa `CREATE OR REPLACE VIEW` y es idempotente. Resultado esperado: `dim_customers` 18 484 filas, `dim_products` 295 y `fact_sales` 60 398. `test_gold.sql` debe devolver cero filas en cada verificación. Las claves subrogadas se generan en la vista y no son estables si cambian los datos de origen.
+
 En Git Bash (Windows), si pasas rutas del contenedor como argumento, antepón `MSYS_NO_PATHCONV=1` para que no se conviertan en rutas de Windows. En PowerShell no hace falta, pero el operador `<` no existe: usa `Get-Content archivo.sql | docker compose exec -T postgres psql ...`.

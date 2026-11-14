@@ -146,9 +146,10 @@ docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL bronze.
 docker compose exec postgres psql -U postgres -d data_warehouse -c "CALL silver.load_silver();"
 ```
 
-5. Ejecutar las pruebas (cada verificación devuelve filas solo si hay un problema; `test_gold.sql` llegará con el paso 6):
+5. Crear las vistas de Gold (idempotente; requiere Silver cargado) y ejecutar las pruebas (cada verificación devuelve filas solo si hay un problema):
 
 ```bash
+docker compose exec -T postgres psql -U postgres -d data_warehouse -v ON_ERROR_STOP=1 < 03_scripts/gold/ddl_gold.sql
 docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_silver.sql
 docker compose exec -T postgres psql -U postgres -d data_warehouse < 04_tests/test_gold.sql
 ```
@@ -165,8 +166,8 @@ La guía detallada está en `00\_setup/README.md`. Los scripts de las capas se c
 |2. Base de datos y esquemas (Docker)|Hecho y verificado|
 |3. Bronze|Hecho y verificado|
 |4. Silver|Hecho y verificado (6 tablas, `silver.load_silver()` y `04_tests/test_silver.sql` sin hallazgos)|
-|5. Gold|Pendiente|
-|6. Pruebas|Pendiente|
+|5. Gold|Hecho y verificado (3 vistas: 18 484, 295 y 60 398 filas; `04_tests/test_gold.sql` sin hallazgos)|
+|6. Pruebas|Parcial (`test_silver.sql` y `test_gold.sql` listos)|
 |7. Documentación|Pendiente|
 
 ## Convenciones

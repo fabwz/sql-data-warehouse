@@ -33,7 +33,7 @@ Reglas por capa:
 
 - **Bronze**: copia fiel del CSV. Todas las columnas de origen, con el mismo nombre. No limpiar, no filtrar, no convertir valores. Sirve para trazabilidad y depuración.
 - **Silver**: lee solo de Bronze. Cada tabla Silver corresponde a una tabla Bronze, con el mismo nombre. Se agregan las columnas técnicas.
-- **Gold**: lee solo de Silver. Vistas que integran las seis fuentes en dimensiones y una tabla de hechos.
+- **Gold**: lee solo de Silver. Vistas que integran las seis fuentes en dimensiones y una tabla de hechos. Única excepción: `gold.fact_sales` se une con las vistas `gold.dim_customers` y `gold.dim_products` para obtener las claves subrogadas.
 - Ninguna capa lee de una capa posterior ni se salta una capa.
 
 ## Fuentes de datos
@@ -154,6 +154,9 @@ Decididas tras perfilar Bronze (paso 4). Están implementadas en `03_scripts/sil
 - La integración CRM + ERP se hace en la dimensión (por ejemplo, el cliente toma sexo y fecha de nacimiento del ERP si el CRM no los tiene).
 - Si hay conflicto entre fuentes, el CRM es la fuente principal.
 - Las vistas no contienen lógica de limpieza: eso ya se hizo en Silver.
+- Las vistas leen de Silver; `fact_sales` es la excepción y se une a las vistas de dimensiones Gold para tomar `customer_key` y `product_key` (LEFT JOIN por `sls_prd_key = product_number` y `sls_cust_id = customer_id`).
+- Las claves subrogadas se generan dentro de la vista y no son estables si cambian los datos de origen.
+- Resultado verificado: `dim_customers` 18 484 filas, `dim_products` 295, `fact_sales` 60 398 (sin huérfanos; `sum(sales_amount)` = `sum(sls_sales)` de Silver). Ventas con país `'n/a'`: 871 líneas.
 
 ## Pruebas (`04_tests/`)
 
